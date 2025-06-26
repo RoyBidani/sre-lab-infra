@@ -1,0 +1,202 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: slo-alerting-rules
+  namespace: monitoring
+  labels:
+    component: slo-alerting
+data:
+  slo-alerts.yml: |
+    groups:
+    # =============================================
+    # SLO VIOLATION ALERTS
+    # =============================================
+    - name: sre-shop-slo-violations
+      rules:
+      
+      # CRITICAL: Availability SLO Violation
+      - alert: SLOViolationAvailabilityCritical
+        expr: sre_shop:availability_sli:rate5m < 0.99
+        for: 5m
+        labels:
+          severity: critical
+          slo: availability
+          service: sre-shop
+          urgency: high
+        annotations:
+          summary: "CRITICAL: SRE Shop availability SLO violation"
+          description: |
+            Availability SLI is {{ $value | humanizePercentage }} which is below the 99.9% SLO target.
+            This indicates a critical service outage affecting user experience.
+            
+            Runbook: https://your-wiki.com/runbooks/availability-slo-violation
+            Dashboard: http://grafana.sre-shop.com/d/sre-shop-slo
+          impact: "Users cannot access the SRE Shop application"
+          action_required: "Immediate investigation and restoration required"
+          
+      # WARNING: Availability trending towards SLO violation  
+      - alert: SLOViolationAvailabilityWarning
+        expr: sre_shop:availability_sli:rate1h < 0.995
+        for: 10m
+        labels:
+          severity: warning
+          slo: availability
+          service: sre-shop
+          urgency: medium
+        annotations:
+          summary: "WARNING: SRE Shop availability trending towards SLO violation"
+          description: |
+            Availability SLI is {{ $value | humanizePercentage }} over the last hour.
+            This is approaching the 99.9% SLO threshold and requires attention.
+            
+            Runbook: https://your-wiki.com/runbooks/availability-trending-down
+          action_required: "Investigate potential issues before they become critical"
+          
+      # CRITICAL: Error Rate SLO Violation
+      - alert: SLOViolationErrorRateCritical
+        expr: sre_shop:error_rate_sli:rate5m < 0.999
+        for: 5m
+        labels:
+          severity: critical
+          slo: error_rate
+          service: sre-shop
+          urgency: high
+        annotations:
+          summary: "CRITICAL: SRE Shop error rate SLO violation"
+          description: |
+            Error rate SLI is {{ $value | humanizePercentage }} which exceeds the 0.1% error budget.
+            High number of failed requests or pod restarts detected.
+            
+            Runbook: https://your-wiki.com/runbooks/error-rate-slo-violation
+          impact: "Users experiencing errors and service failures"
+          action_required: "Immediate investigation of error sources"
+          
+      # WARNING: High Resource Saturation
+      - alert: SLOViolationSaturationWarning
+        expr: sre_shop:cpu_saturation_sli:rate5m > 80
+        for: 10m
+        labels:
+          severity: warning
+          slo: saturation
+          service: sre-shop
+          urgency: medium
+        annotations:
+          summary: "WARNING: SRE Shop high resource saturation"
+          description: |
+            CPU utilization is {{ $value }}% which exceeds the 80% saturation threshold.
+            This may lead to performance degradation and potential SLO violations.
+            
+            Runbook: https://your-wiki.com/runbooks/high-resource-utilization
+          action_required: "Consider scaling resources or optimizing application performance"
+          
+    # =============================================
+    # ERROR BUDGET ALERTS
+    # =============================================
+    - name: sre-shop-error-budget
+      rules:
+      
+      # Error Budget 50% Consumed
+      - alert: ErrorBudget50PercentConsumed
+        expr: |
+          (
+            1 - avg_over_time(sre_shop:availability_sli:rate5m[7d])
+          ) / (1 - 0.999) > 0.5
+        for: 0m
+        labels:
+          severity: warning
+          service: sre-shop
+          error_budget: "50_percent"
+        annotations:
+          summary: "SRE Shop has consumed 50% of error budget"
+          description: |
+            The SRE Shop service has consumed 50% of its weekly error budget.
+            Consider slowing down feature releases and focusing on reliability.
+            
+            Current availability: {{ $value | humanizePercentage }}
+            Target availability: 99.9%
+          action_required: "Review recent changes and implement reliability improvements"
+          
+      # Error Budget 90% Consumed
+      - alert: ErrorBudget90PercentConsumed
+        expr: |
+          (
+            1 - avg_over_time(sre_shop:availability_sli:rate5m[7d])
+          ) / (1 - 0.999) > 0.9
+        for: 0m
+        labels:
+          severity: critical
+          service: sre-shop
+          error_budget: "90_percent"
+        annotations:
+          summary: "CRITICAL: SRE Shop has consumed 90% of error budget"
+          description: |
+            The SRE Shop service has consumed 90% of its weekly error budget.
+            Feature freeze should be implemented until reliability is restored.
+            
+            Current availability: {{ $value | humanizePercentage }}
+            Target availability: 99.9%
+          action_required: "Implement feature freeze and focus on stability"
+          
+    # =============================================
+    # APPLICATION-SPECIFIC ALERTS
+    # =============================================
+    - name: sre-shop-application-alerts
+      rules:
+      
+      # Pod Crash Loop
+      - alert: PodCrashLoopingBackOff
+        expr: rate(kube_pod_container_status_restarts_total{namespace="sre-shop"}[15m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+          service: sre-shop
+          component: "{{ $labels.pod }}"
+        annotations:
+          summary: "Pod {{ $labels.pod }} is crash looping"
+          description: |
+            Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is restarting frequently.
+            This indicates a serious application or configuration issue.
+            
+            Restart rate: {{ $value }} restarts/minute
+            
+            Runbook: https://your-wiki.com/runbooks/pod-crash-loop
+          action_required: "Check pod logs and resolve underlying issue"
+          
+      # High Memory Usage
+      - alert: HighMemoryUsage
+        expr: |
+          (
+            container_memory_usage_bytes{namespace="sre-shop"} / 
+            container_spec_memory_limit_bytes{namespace="sre-shop"}
+          ) > 0.9
+        for: 10m
+        labels:
+          severity: warning
+          service: sre-shop
+          component: "{{ $labels.pod }}"
+        annotations:
+          summary: "High memory usage in {{ $labels.pod }}"
+          description: |
+            Pod {{ $labels.pod }} is using {{ $value | humanizePercentage }} of its memory limit.
+            This may lead to OOMKilled events and service disruption.
+            
+            Runbook: https://your-wiki.com/runbooks/high-memory-usage
+          action_required: "Investigate memory leaks or increase resource limits"
+          
+      # Redis Connection Issues
+      - alert: RedisConnectionFailure
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: sre-shop
+          component: redis
+        annotations:
+          summary: "Redis database is unavailable"
+          description: |
+            Redis database is not responding to health checks.
+            This will cause backend API failures and service degradation.
+            
+            Runbook: https://your-wiki.com/runbooks/redis-failure
+          impact: "Backend services cannot store/retrieve session data"
+          action_required: "Restore Redis service immediately"

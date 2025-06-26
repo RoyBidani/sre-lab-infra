@@ -1,0 +1,178 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: 'localhost:587'
+      smtp_from: 'sre-alerts@company.com'
+
+    route:
+      group_by: ['alertname', 'service']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 1h
+      receiver: 'default-receiver'
+      routes:
+      # Critical SLO violations - immediate escalation
+      - match:
+          severity: critical
+        receiver: 'critical-alerts'
+        group_wait: 0s
+        repeat_interval: 5m
+        routes:
+        - match:
+            slo: availability
+          receiver: 'availability-critical'
+        - match:
+            slo: error_rate  
+          receiver: 'error-rate-critical'
+        
+      # Warning alerts - standard notification
+      - match:
+          severity: warning
+        receiver: 'warning-alerts'
+        repeat_interval: 30m
+        
+      # Error budget alerts - management notification
+      - match_re:
+          error_budget: '.*'
+        receiver: 'error-budget-alerts'
+        repeat_interval: 1h
+
+    receivers:
+    - name: 'default-receiver'
+      # Uncomment and configure when you have a Slack webhook URL
+      # slack_configs:
+      # - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+      #   channel: '#sre-alerts'
+      #   title: 'SRE Shop Alert'
+      #   text: |
+      #     {{ range .Alerts }}
+      #     *Alert:* {{ .Annotations.summary }}
+      #     *Description:* {{ .Annotations.description }}
+      #     *Service:* {{ .Labels.service }}
+      #     *Severity:* {{ .Labels.severity }}
+      #     {{ end }}
+
+    - name: 'critical-alerts'
+      # Uncomment and configure when you have notification channels
+      # slack_configs:
+      # - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+      #   channel: '#sre-critical'
+      #   title: '🚨 CRITICAL ALERT - SRE Shop'
+        
+    - name: 'availability-critical'
+      slack_configs:
+      - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        channel: '#sre-critical'
+        title: '🔴 SERVICE DOWN - SRE Shop Availability SLO Violation'
+        text: |
+          🔴 *SERVICE AVAILABILITY CRITICAL* 🔴
+          
+          {{ range .Alerts }}
+          *Summary:* {{ .Annotations.summary }}
+          *Current Availability:* {{ $value | humanizePercentage }}
+          *SLO Target:* 99.9%
+          
+          *Impact:* {{ .Annotations.impact }}
+          *Action Required:* {{ .Annotations.action_required }}
+          
+          📊 Dashboard: http://grafana/d/sre-shop-slo
+          📖 Runbook: https://wiki/runbooks/availability-slo-violation
+          {{ end }}
+          
+    - name: 'error-rate-critical'
+      slack_configs:
+      - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        channel: '#sre-critical'
+        title: '⚠️ HIGH ERROR RATE - SRE Shop Error SLO Violation'
+        
+    - name: 'warning-alerts'
+      slack_configs:
+      - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        channel: '#sre-warnings'
+        title: '⚠️ Warning - SRE Shop'
+        
+    - name: 'error-budget-alerts'
+      slack_configs:
+      - api_url: 'YOUR_SLACK_WEBHOOK_URL'
+        channel: '#sre-management'
+        title: '📊 Error Budget Alert - SRE Shop'
+        text: |
+          {{ range .Alerts }}
+          📊 *Error Budget Consumption Alert*
+          
+          *Summary:* {{ .Annotations.summary }}
+          *Service:* {{ .Labels.service }}
+          *Budget Consumed:* {{ .Labels.error_budget }}
+          
+          *Action Required:* {{ .Annotations.action_required }}
+          
+          Consider implementing feature freeze if error budget is critically low.
+          {{ end }}
+
+    inhibit_rules:
+    - source_match:
+        severity: 'critical'
+      target_match:
+        severity: 'warning'
+      equal: ['alertname', 'service']
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alertmanager
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alertmanager
+  template:
+    metadata:
+      labels:
+        app: alertmanager
+    spec:
+      containers:
+      - name: alertmanager
+        image: prom/alertmanager:v0.26.0
+        args:
+          - '--config.file=/etc/alertmanager/alertmanager.yml'
+          - '--storage.path=/alertmanager'
+          - '--web.external-url=http://localhost:9093'
+        ports:
+        - containerPort: 9093
+        resources:
+          requests:
+            memory: 128Mi
+            cpu: 100m
+          limits:
+            memory: 256Mi
+            cpu: 200m
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/alertmanager
+        - name: storage-volume
+          mountPath: /alertmanager
+      volumes:
+      - name: config-volume
+        configMap:
+          name: alertmanager-config
+      - name: storage-volume
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: alertmanager
+  namespace: monitoring
+spec:
+  selector:
+    app: alertmanager
+  ports:
+  - port: 9093
+    targetPort: 9093
+  type: LoadBalancer

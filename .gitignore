@@ -1,0 +1,50 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform/
+.terraform.lock.hcl
+terraform.tfplan
+terraform.tfplan.*
+
+# Kubernetes secrets (if any)
+*-secret.yaml
+secrets/
+
+# Backup files
+config-backups/
+*.backup
+*.bak
+
+# Logs
+*.log
+logs/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Claude settings (keep local only)
+.claude/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+

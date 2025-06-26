@@ -1,0 +1,295 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chaos-monkey
+  namespace: sre-shop
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: chaos-monkey
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["list", "delete", "get"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets"]
+  verbs: ["list", "get", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: chaos-monkey
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: chaos-monkey
+subjects:
+- kind: ServiceAccount
+  name: chaos-monkey
+  namespace: sre-shop
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chaos-scripts
+  namespace: sre-shop
+data:
+  chaos-pod-killer.sh: |
+    #!/bin/bash
+    
+    # Chaos Monkey - Pod Killer
+    # Randomly kills pods to test resilience
+    
+    NAMESPACE="sre-shop"
+    CHAOS_INTERVAL=${CHAOS_INTERVAL:-300}  # 5 minutes default
+    KILL_PROBABILITY=${KILL_PROBABILITY:-0.1}  # 10% chance
+    
+    echo "🐒 Chaos Monkey Pod Killer started"
+    echo "📍 Target namespace: $NAMESPACE"
+    echo "⏰ Chaos interval: $CHAOS_INTERVAL seconds"
+    echo "🎲 Kill probability: $KILL_PROBABILITY"
+    
+    while true; do
+        echo "🔍 Looking for victims..."
+        
+        # Get all pods in the namespace
+        PODS=$(kubectl get pods -n $NAMESPACE -o jsonpath='{.items[*].metadata.name}')
+        
+        if [ -z "$PODS" ]; then
+            echo "❌ No pods found in namespace $NAMESPACE"
+            sleep $CHAOS_INTERVAL
+            continue
+        fi
+        
+        # Convert to array
+        POD_ARRAY=($PODS)
+        
+        for pod in "${POD_ARRAY[@]}"; do
+            # Random number between 0 and 1
+            RANDOM_VALUE=$(echo "scale=2; $RANDOM / 32767" | bc)
+            
+            if (( $(echo "$RANDOM_VALUE < $KILL_PROBABILITY" | bc -l) )); then
+                echo "💀 Killing pod: $pod"
+                kubectl delete pod $pod -n $NAMESPACE --force --grace-period=0
+                
+                # Log the chaos event
+                echo "$(date): Chaos Monkey killed pod $pod" >> /var/log/chaos-events.log
+                
+                # Wait a bit after killing a pod
+                sleep 30
+            else
+                echo "🍀 Pod $pod survives this round"
+            fi
+        done
+        
+        echo "😴 Sleeping for $CHAOS_INTERVAL seconds..."
+        sleep $CHAOS_INTERVAL
+    done
+    
+  chaos-network-delay.sh: |
+    #!/bin/bash
+    
+    # Chaos Monkey - Network Delay
+    # Introduces network latency to test resilience
+    
+    NAMESPACE="sre-shop"
+    DELAY_DURATION=${DELAY_DURATION:-60}  # 1 minute
+    LATENCY_MS=${LATENCY_MS:-100}  # 100ms latency
+    
+    echo "🌐 Chaos Monkey Network Delay started"
+    echo "📍 Target namespace: $NAMESPACE"
+    echo "⏰ Delay duration: $DELAY_DURATION seconds"
+    echo "🐌 Added latency: ${LATENCY_MS}ms"
+    
+    while true; do
+        # Get a random pod
+        POD=$(kubectl get pods -n $NAMESPACE -o jsonpath='{.items[0].metadata.name}')
+        
+        if [ -n "$POD" ]; then
+            echo "🎯 Adding network delay to pod: $POD"
+            
+            # Add network delay using tc (traffic control)
+            kubectl exec -n $NAMESPACE $POD -- tc qdisc add dev eth0 root netem delay ${LATENCY_MS}ms 2>/dev/null || true
+            
+            echo "$(date): Added ${LATENCY_MS}ms latency to $POD" >> /var/log/chaos-events.log
+            
+            sleep $DELAY_DURATION
+            
+            # Remove network delay
+            kubectl exec -n $NAMESPACE $POD -- tc qdisc del dev eth0 root 2>/dev/null || true
+            echo "✅ Removed network delay from pod: $POD"
+        fi
+        
+        sleep 300  # Wait 5 minutes before next chaos
+    done
+    
+  chaos-cpu-stress.sh: |
+    #!/bin/bash
+    
+    # Chaos Monkey - CPU Stress Test
+    # Generates high CPU load to test resource limits
+    
+    NAMESPACE="sre-shop"
+    STRESS_DURATION=${STRESS_DURATION:-120}  # 2 minutes
+    CPU_CORES=${CPU_CORES:-1}
+    
+    echo "💻 Chaos Monkey CPU Stress started"
+    echo "📍 Target namespace: $NAMESPACE"
+    echo "⏰ Stress duration: $STRESS_DURATION seconds"
+    echo "🔥 CPU cores to stress: $CPU_CORES"
+    
+    while true; do
+        # Get backend pods specifically
+        PODS=$(kubectl get pods -n $NAMESPACE -l app=backend-api -o jsonpath='{.items[*].metadata.name}')
+        POD_ARRAY=($PODS)
+        
+        if [ ${#POD_ARRAY[@]} -gt 0 ]; then
+            # Pick a random backend pod
+            RANDOM_INDEX=$(($RANDOM % ${#POD_ARRAY[@]}))
+            POD=${POD_ARRAY[$RANDOM_INDEX]}
+            
+            echo "🎯 Stressing CPU on pod: $POD"
+            
+            # Run stress test in background
+            kubectl exec -n $NAMESPACE $POD -- sh -c "
+              for i in \$(seq 1 $CPU_CORES); do
+                yes > /dev/null &
+              done
+              sleep $STRESS_DURATION
+              killall yes
+            " &
+            
+            echo "$(date): Started CPU stress on $POD for ${STRESS_DURATION}s" >> /var/log/chaos-events.log
+        fi
+        
+        sleep 600  # Wait 10 minutes before next stress test
+    done
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chaos-monkey
+  namespace: sre-shop
+  labels:
+    app: chaos-monkey
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chaos-monkey
+  template:
+    metadata:
+      labels:
+        app: chaos-monkey
+    spec:
+      serviceAccountName: chaos-monkey
+      containers:
+      - name: chaos-monkey
+        image: alpine/k8s:1.28.2
+        command: ["/bin/sh"]
+        args: ["-c", "apk add --no-cache bc && /bin/sh /scripts/chaos-pod-killer.sh"]
+        env:
+        - name: CHAOS_INTERVAL
+          value: "300"  # 5 minutes
+        - name: KILL_PROBABILITY  
+          value: "0.05"  # 5% chance
+        volumeMounts:
+        - name: chaos-scripts
+          mountPath: /scripts
+        - name: chaos-logs
+          mountPath: /var/log
+        resources:
+          requests:
+            memory: 64Mi
+            cpu: 50m
+          limits:
+            memory: 128Mi
+            cpu: 100m
+      volumes:
+      - name: chaos-scripts
+        configMap:
+          name: chaos-scripts
+          defaultMode: 0755
+      - name: chaos-logs
+        emptyDir: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chaos-experiment-plans
+  namespace: sre-shop
+data:
+  experiment-1-pod-failure.yaml: |
+    # Chaos Engineering Experiment 1: Pod Failure Resilience
+    
+    experiment:
+      name: "Pod Failure Resilience Test"
+      description: "Test application resilience to random pod failures"
+      duration: "30m"
+      
+    hypothesis:
+      - "Application should remain available when individual pods fail"
+      - "Load balancer should route traffic to healthy pods"
+      - "Failed pods should be automatically replaced"
+      - "Response time should not significantly increase"
+      
+    blast_radius:
+      namespace: "sre-shop"
+      target_pods: "backend-api"
+      max_pods_to_kill: 1
+      
+    success_criteria:
+      - availability_sli: "> 99.5%"
+      - response_time_p95: "< 500ms"
+      - error_rate: "< 1%"
+      
+    monitoring:
+      - "sre_shop:availability_sli:rate5m"
+      - "up{job=\"sre-shop-backend\"}"
+      - "kube_pod_container_status_restarts_total"
+      
+  experiment-2-network-partition.yaml: |
+    # Chaos Engineering Experiment 2: Network Partition
+    
+    experiment:
+      name: "Network Partition Resilience"
+      description: "Test application behavior during network latency/partitions"
+      duration: "15m"
+      
+    hypothesis:
+      - "Application should handle network delays gracefully"
+      - "Circuit breakers should activate if configured"
+      - "Database connections should be retried"
+      
+    blast_radius:
+      namespace: "sre-shop"
+      target_service: "redis-service"
+      network_delay: "200ms"
+      
+    success_criteria:
+      - error_rate: "< 5%"
+      - recovery_time: "< 2m"
+      
+  experiment-3-resource-exhaustion.yaml: |
+    # Chaos Engineering Experiment 3: Resource Exhaustion
+    
+    experiment:
+      name: "CPU/Memory Resource Exhaustion"
+      description: "Test application behavior under resource pressure"
+      duration: "10m"
+      
+    hypothesis:
+      - "Kubernetes should throttle CPU when limits are reached"
+      - "OOMKiller should restart pods that exceed memory limits"
+      - "Application should gracefully handle resource constraints"
+      
+    blast_radius:
+      namespace: "sre-shop"
+      target_pods: "backend-api"
+      resource_type: "cpu"
+      stress_level: "100%"
+      
+    success_criteria:
+      - pod_restart_count: "< 3"
+      - response_time_increase: "< 200%"
