@@ -96,7 +96,14 @@ data:
       # AVAILABILITY SLI RECORDING RULES
       # ============================================
       - record: sre_shop:availability_sli:rate5m
-        expr: avg_over_time(up{job="sre-shop-backend"}[5m])
+        expr: avg(up{job="sre-shop-backend"})
+        labels:
+          slo: "availability"
+          service: "sre-shop"
+          
+      # SLO Target constant for dashboard
+      - record: sre_shop:availability_slo_target
+        expr: 0.999
         labels:
           slo: "availability"
           service: "sre-shop"
@@ -116,12 +123,15 @@ data:
       # ============================================
       # ERROR RATE SLI RECORDING RULES
       # ============================================
+      # Error Rate SLI (based on pod restarts - simple approach)
       - record: sre_shop:error_rate_sli:rate5m
         expr: |
-          1 - (
-            sum(rate(kube_pod_container_status_restarts_total{namespace="sre-shop"}[5m])) /
-            sum(kube_pod_info{namespace="sre-shop"})
-          )
+          (
+            1 - (
+              sum(increase(kube_pod_container_status_restarts_total{namespace="sre-shop"}[5m])) /
+              (sum(kube_pod_info{namespace="sre-shop"}) * 5)
+            )
+          ) or 1
         labels:
           slo: "error_rate"
           service: "sre-shop"
@@ -129,21 +139,23 @@ data:
       # ============================================
       # SATURATION SLI RECORDING RULES
       # ============================================
+      # CPU Usage (simplified - use process cpu from podinfo)  
       - record: sre_shop:cpu_saturation_sli:rate5m
         expr: |
           avg(
-            rate(container_cpu_usage_seconds_total{namespace="sre-shop"}[5m]) * 100
-          )
+            rate(process_cpu_seconds_total{job="sre-shop-backend"}[5m]) * 100
+          ) or 0
         labels:
           slo: "cpu_saturation"
           service: "sre-shop"
           
+      # Memory Usage (simplified - use process memory from podinfo)
       - record: sre_shop:memory_saturation_sli:rate5m
         expr: |
           avg(
-            container_memory_usage_bytes{namespace="sre-shop"} / 
-            (1024*1024*1024)  # Convert to GB
-          )
+            process_resident_memory_bytes{job="sre-shop-backend"} / 
+            (1024*1024)  # Convert to MB
+          ) or 0
         labels:
           slo: "memory_saturation"
           service: "sre-shop"

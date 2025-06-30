@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: traffic-generator
+  namespace: sre-shop
+  labels:
+    app: traffic-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: traffic-generator
+  template:
+    metadata:
+      labels:
+        app: traffic-generator
+    spec:
+      containers:
+      - name: traffic-generator
+        image: curlimages/curl:latest
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            echo "🚀 Starting traffic generator..."
+            echo "Generating continuous traffic to backend..."
+            while true; do
+              # Hit the metrics endpoint multiple times
+              curl -s http://backend-service.sre-shop.svc.cluster.local:8080/metrics > /dev/null || echo "metrics failed"
+              curl -s http://backend-service.sre-shop.svc.cluster.local:8080/ > /dev/null || echo "root failed"
+              curl -s http://backend-service.sre-shop.svc.cluster.local:8080/healthz > /dev/null || echo "healthz failed"
+              curl -s http://backend-service.sre-shop.svc.cluster.local:8080/readyz > /dev/null || echo "readyz failed"
+              curl -s http://backend-service.sre-shop.svc.cluster.local:8080/version > /dev/null || echo "version failed"
+              
+              # Short delay for higher request rate
+              sleep 0.5
+            done
+        resources:
+          requests:
+            memory: "16Mi"
+            cpu: "10m"
+          limits:
+            memory: "32Mi"
+            cpu: "50m"

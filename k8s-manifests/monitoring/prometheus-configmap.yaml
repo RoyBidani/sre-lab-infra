@@ -51,6 +51,19 @@ data:
         - action: labelmap
           regex: __meta_kubernetes_node_label_(.+)
 
+      # Kubernetes nodes cAdvisor
+      - job_name: 'kubernetes-cadvisor'
+        kubernetes_sd_configs:
+        - role: node
+        scheme: https
+        metrics_path: /metrics/cadvisor
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+        - action: labelmap
+          regex: __meta_kubernetes_node_label_(.+)
+
       # Kubernetes pods
       - job_name: 'kubernetes-pods'
         kubernetes_sd_configs:
@@ -91,7 +104,7 @@ data:
         - source_labels: [__address__]
           action: replace
           regex: ([^:]+)(?::\d+)?
-          replacement: $1:8080
+          replacement: $1:9898
           target_label: __address__
         - action: labelmap
           regex: __meta_kubernetes_pod_label_(.+)
@@ -101,6 +114,11 @@ data:
         - source_labels: [__meta_kubernetes_pod_name]
           action: replace
           target_label: kubernetes_pod_name
+
+      # Kube State Metrics
+      - job_name: 'kube-state-metrics'
+        static_configs:
+          - targets: ['kube-state-metrics:8080']
 
   alerting_rules.yml: |
     groups:

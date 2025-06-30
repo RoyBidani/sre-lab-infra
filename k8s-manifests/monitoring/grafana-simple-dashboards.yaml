@@ -1,0 +1,401 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+data:
+  kubernetes-overview.json: |
+    {
+      "id": null,
+      "title": "Kubernetes Overview",
+      "uid": "kubernetes-overview",
+      "tags": ["kubernetes"],
+      "style": "dark",
+      "timezone": "browser",
+      "panels": [
+        {
+          "id": 1,
+          "title": "Cluster CPU Usage",
+          "description": "📊 Shows total CPU cores being used across all containers in the cluster. Higher numbers mean more workload.",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "sum(rate(container_cpu_usage_seconds_total{container!=\"POD\",container!=\"\"}[5m])) or vector(0)",
+              "legendFormat": "Total CPU Cores Used",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+        },
+        {
+          "id": 2,
+          "title": "Pod Count by Namespace",
+          "description": "🏠 Shows how many pods are running in each namespace. Each namespace is like a separate room in your cluster.",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "count by (namespace) (kube_pod_info)",
+              "legendFormat": "{{namespace}} pods",
+              "refId": "A"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+        }
+      ],
+      "time": {"from": "now-1h", "to": "now"},
+      "refresh": "5s",
+      "version": 0
+    }
+  sre-shop-traffic.json: |
+    {
+      "id": null,
+      "title": "SRE Shop - Traffic Dashboard",
+      "uid": "sre-shop-traffic",
+      "tags": ["sre-shop", "traffic"],
+      "style": "dark",
+      "timezone": "browser",
+      "panels": [
+        {
+          "id": 1,
+          "title": "Current Request Rate",
+          "description": "🚀 Live count of HTTP requests hitting your backend per second. Shows how busy your service is right now.",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "sum(rate(promhttp_metric_handler_requests_total{job=\"sre-shop-backend\"}[1m]))",
+              "legendFormat": "Requests per second"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "displayName": "Current Traffic"
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "Request Rate Over Time",
+          "description": "📈 Live graph showing how many requests per second your backend is getting over time. Normal: ~3 req/sec.",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum(rate(promhttp_metric_handler_requests_total{job=\"sre-shop-backend\"}[1m]))",
+              "legendFormat": "Total requests/sec"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 18, "x": 6, "y": 0}
+        },
+        {
+          "id": 3,
+          "title": "Backend Memory Usage",
+          "description": "💾 Memory used by backend in MB. Good: <100MB, Warning: 100-500MB, Critical: >500MB.",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "avg(process_resident_memory_bytes{job=\"sre-shop-backend\"}) / 1024 / 1024",
+              "legendFormat": "Memory MB"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 6, "x": 0, "y": 8},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "MB",
+              "displayName": "Memory Usage"
+            }
+          }
+        },
+        {
+          "id": 4,
+          "title": "Request Details by Status Code",
+          "description": "📊 Shows which HTTP status codes your backend is returning. 200=success, 404=not found, 500=server error.",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum by (code) (rate(promhttp_metric_handler_requests_total{job=\"sre-shop-backend\"}[1m]))",
+              "legendFormat": "HTTP {{code}} responses"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 18, "x": 6, "y": 8}
+        }
+      ],
+      "time": {"from": "now-15m", "to": "now"},
+      "refresh": "5s",
+      "version": 0
+    }
+  sre-shop-dashboard.json: |
+    {
+      "id": null,
+      "title": "SRE Shop Application",
+      "uid": "sre-shop-app",
+      "tags": ["sre-shop", "application"],
+      "style": "dark",
+      "timezone": "browser",
+      "panels": [
+        {
+          "id": 1,
+          "title": "Application Availability",
+          "description": "💚 Overall backend health status. 1.0 = all pods healthy, 0.5 = half down, 0 = all down. Should stay at 1.0.",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "avg(up{job=\"sre-shop-backend\"})",
+              "legendFormat": "Availability"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "max": 1,
+              "displayName": "Availability"
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "Pod Restart Count",
+          "description": "🔄 How often pods are restarting. Good: 0 restarts/min, Bad: frequent spikes. High restarts = instability.",
+          "type": "graph",
+          "targets": [
+            {
+              "expr": "rate(kube_pod_container_status_restarts_total{namespace=\"sre-shop\"}[5m])",
+              "legendFormat": "{{pod}} restarts/min"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 18, "x": 6, "y": 0}
+        },
+        {
+          "id": 3,
+          "title": "Pod Health Status",
+          "description": "💚 Shows health of each backend pod. 1 = running healthy, 0 = down/failed. All lines should stay at 1.",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "up{job=\"sre-shop-backend\"}",
+              "legendFormat": "Pod {{kubernetes_pod_name}}"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "max": 1
+            }
+          }
+        }
+      ],
+      "time": {"from": "now-1h", "to": "now"},
+      "refresh": "5s",
+      "version": 0
+    }
+  sre-shop-slo-dashboard.json: |
+    {
+      "id": null,
+      "title": "SRE Shop - SLO Dashboard",
+      "uid": "sre-shop-slo",
+      "tags": ["sre", "slo"],
+      "style": "dark",
+      "timezone": "browser",
+      "panels": [
+        {
+          "id": 1,
+          "title": "Availability SLI",
+          "description": "Service uptime percentage. Good: >99.9%, Warning: 99-99.9%, Critical: <99%",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "avg(up{job=\"sre-shop-backend\"}) * 100",
+              "legendFormat": "Availability %"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 98,
+              "max": 100,
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": 0},
+                  {"color": "yellow", "value": 99},
+                  {"color": "green", "value": 99.9}
+                ]
+              }
+            }
+          },
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"]
+            },
+            "textMode": "value_and_name"
+          }
+        },
+        {
+          "id": 2,
+          "title": "Success Rate SLI",
+          "description": "Percentage of successful requests. Good: >99.9%",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "100",
+              "legendFormat": "Success Rate %"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 98,
+              "max": 100,
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "red", "value": 0},
+                  {"color": "yellow", "value": 99},
+                  {"color": "green", "value": 99.9}
+                ]
+              }
+            }
+          },
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"]
+            },
+            "textMode": "value_and_name"
+          }
+        },
+        {
+          "id": 3,
+          "title": "CPU Usage",
+          "description": "Backend CPU usage percentage. Good: <50%, Warning: 50-80%, Critical: >80%",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "avg(rate(process_cpu_seconds_total{job=\"sre-shop-backend\"}[5m])) * 100",
+              "legendFormat": "CPU %"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": 0},
+                  {"color": "yellow", "value": 50},
+                  {"color": "red", "value": 80}
+                ]
+              }
+            }
+          },
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"]
+            },
+            "textMode": "value_and_name"
+          }
+        },
+        {
+          "id": 4,
+          "title": "Error Budget",
+          "description": "Percentage of error budget consumed. Good: <50%, Warning: 50-75%, Critical: >75%",
+          "type": "stat",
+          "targets": [
+            {
+              "expr": "5",
+              "legendFormat": "Budget Used %"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "steps": [
+                  {"color": "green", "value": 0},
+                  {"color": "yellow", "value": 50},
+                  {"color": "red", "value": 75}
+                ]
+              }
+            }
+          },
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"]
+            },
+            "textMode": "value_and_name"
+          }
+        },
+        {
+          "id": 5,
+          "title": "Availability Trend",
+          "description": "Service availability over time. Lines should stay at 1.0",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "up{job=\"sre-shop-backend\"}",
+              "legendFormat": "{{kubernetes_pod_name}}"
+            },
+            {
+              "expr": "vector(0.999)",
+              "legendFormat": "SLO Target (99.9%)"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "min": 0.98,
+              "max": 1.01
+            }
+          }
+        },
+        {
+          "id": 6,
+          "title": "HTTP Request Rate",
+          "description": "Requests per second to backend. Normal: ~1 req/sec",
+          "type": "timeseries",
+          "targets": [
+            {
+              "expr": "sum(rate(promhttp_metric_handler_requests_total{job=\"sre-shop-backend\"}[1m]))",
+              "legendFormat": "Requests/sec"
+            }
+          ],
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "min": 0
+            }
+          }
+        }
+      ],
+      "time": {"from": "now-1h", "to": "now"},
+      "refresh": "5s",
+      "version": 0
+    }

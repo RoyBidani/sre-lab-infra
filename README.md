@@ -16,6 +16,17 @@ A comprehensive, hands-on Site Reliability Engineering (SRE) training platform b
 - [Advanced Topics](#advanced-topics)
 - [Cleanup](#cleanup)
 
+## 📚 **Complete Documentation Suite**
+
+This project includes comprehensive documentation covering every aspect of SRE:
+
+- 🚀 **[MONITORING-SETUP.md](MONITORING-SETUP.md)** - Complete monitoring stack guide with dashboard access
+- 📊 **[DASHBOARD-EXPLANATION.md](DASHBOARD-EXPLANATION.md)** - Detailed explanation of every metric and chart
+- 🎯 **[SRE-FUNDAMENTALS.md](SRE-FUNDAMENTALS.md)** - Complete beginner's guide to SRE concepts and technologies
+- 🛠️ **[OPERATIONAL-PROCEDURES.md](OPERATIONAL-PROCEDURES.md)** - Day-2 operations, backup, security, and troubleshooting
+- 🏗️ **[TECHNOLOGY-GUIDE.md](TECHNOLOGY-GUIDE.md)** - Architecture decisions and technology comparisons
+- 🤝 **[CONTRIBUTING.md](CONTRIBUTING.md)** - Contribution guidelines and development workflow
+
 ## 🎯 Overview
 
 This project creates a production-grade SRE training environment where you'll learn:
@@ -26,6 +37,8 @@ This project creates a production-grade SRE training environment where you'll le
 - **SLO/SLI monitoring** and error budget management
 - **Incident response** and chaos engineering
 - **Real-world SRE practices** used by tech giants
+
+# 
 
 ### Why This Architecture?
 
@@ -562,12 +575,14 @@ Targets for SLI performance:
 
 ### Phase 3: Observe Monitoring Data
 
+> 📖 **For complete monitoring setup details, dashboard explanations, and troubleshooting, see [MONITORING-SETUP.md](MONITORING-SETUP.md)**
+
 #### **Access Grafana Dashboards**
 
 1. Get Grafana URL: `kubectl get service grafana -n monitoring`
-2. Login: admin/admin
+2. Login: admin/admin123
 3. Navigate to "SRE Shop - SLO Dashboard"
-4. Observe metrics populating (takes 5-10 minutes)
+4. All dashboards show real data with clear explanations and color coding
 
 #### **Check Prometheus Metrics**
 
@@ -632,6 +647,10 @@ During chaos events:
 4. **Monitoring captures service degradation**
 
 ## 📚 Learning Exercises
+
+> 📊 **Dashboard Guide**: See [DASHBOARD-EXPLANATION.md](DASHBOARD-EXPLANATION.md) for detailed metric explanations
+> 
+> 🚀 **Monitoring Setup**: See [MONITORING-SETUP.md](MONITORING-SETUP.md) for complete monitoring stack details
 
 ### Exercise 1: Understanding Kubernetes Fundamentals
 

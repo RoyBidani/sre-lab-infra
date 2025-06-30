@@ -18,18 +18,20 @@ spec:
         tier: backend
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
-        prometheus.io/path: "/"
+        prometheus.io/port: "9898"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
       - name: backend
-        image: hashicorp/http-echo:latest
-        args:
-        - -text={"service":"backend-api","version":"1.0","status":"healthy","timestamp":"$(date)","pod":"$(hostname)"}
-        - -listen=:8080
+        image: stefanprodan/podinfo:6.5.0
         ports:
-        - containerPort: 8080
+        - containerPort: 9898
+          name: http
+        - containerPort: 9999
+          name: grpc
         env:
+        - name: PODINFO_UI_COLOR
+          value: "#34577c"
         - name: REDIS_HOST
           value: "redis-service"
         - name: REDIS_PORT
@@ -43,14 +45,14 @@ spec:
             cpu: "100m"
         livenessProbe:
           httpGet:
-            path: /
-            port: 8080
+            path: /healthz
+            port: 9898
           initialDelaySeconds: 10
           periodSeconds: 15
         readinessProbe:
           httpGet:
-            path: /
-            port: 8080
+            path: /readyz
+            port: 9898
           initialDelaySeconds: 5
           periodSeconds: 10
 ---
@@ -66,5 +68,5 @@ spec:
     app: backend-api
   ports:
   - port: 8080
-    targetPort: 8080
+    targetPort: 9898
   type: ClusterIP
